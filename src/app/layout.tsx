@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RoastMyLP",
-  description: "AI landing-page conversion critique.",
+  title: "RoastMyLP — Screenshot-based landing page critique",
+  description:
+    "Get a private AI conversion score and five screenshot-grounded critiques for your landing page for ₹199.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
