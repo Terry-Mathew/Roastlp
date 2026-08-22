@@ -21,6 +21,14 @@ erDiagram
 
 `webhook_events` intentionally has no foreign key to `payments`: a valid provider event may arrive before its referenced order/payment has been reconciled locally. The processor uses provider identifiers to reconcile it later without discarding or forging ordering.
 
+POR-15 records only authenticated, sanitized Razorpay webhook evidence. A
+public webhook request ends after that durable ingestion. POR-17's authenticated
+worker/sweep invokes the stored-event processor. A captured event releases a
+Roast only after current Payment and Order API data also match the local order,
+receipt, amount, currency and payment identifier. The capture transition,
+Roast release, single pending Audit Job and webhook completion are one database
+transaction.
+
 ## Invariants
 
 - A Roast tracks fulfilment; it never substitutes for Payment or Refund state.
