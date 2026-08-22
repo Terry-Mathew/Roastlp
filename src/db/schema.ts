@@ -35,6 +35,12 @@ export const paymentState = pgEnum("payment_state", [
   "refunded",
 ]);
 
+export const checkoutAttemptState = pgEnum("checkout_attempt_state", [
+  "order_creating",
+  "order_created",
+  "failed",
+]);
+
 export const auditJobState = pgEnum("audit_job_state", [
   "pending",
   "leased",
@@ -108,6 +114,10 @@ export const roasts = pgTable(
     privacyNoticeVersion: varchar("privacy_notice_version", {
       length: 64,
     }).notNull(),
+    termsVersion: varchar("terms_version", { length: 64 }).notNull(),
+    refundPolicyVersion: varchar("refund_policy_version", {
+      length: 64,
+    }).notNull(),
     consentedAt: timestamp("consented_at", { withTimezone: true }).notNull(),
     terminalErrorCode: varchar("terminal_error_code", { length: 64 }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -123,6 +133,43 @@ export const roasts = pgTable(
     check(
       "roasts_deleted_state_check",
       sql`(${table.state} = 'deleted' AND ${table.deletedAt} IS NOT NULL) OR (${table.state} <> 'deleted' AND ${table.deletedAt} IS NULL)`,
+    ),
+  ],
+);
+
+export const checkoutAttempts = pgTable(
+  "checkout_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roastId: uuid("roast_id")
+      .notNull()
+      .references(() => roasts.id, { onDelete: "restrict" }),
+    state: checkoutAttemptState("state").notNull().default("order_creating"),
+    requestKeyHash: varchar("request_key_hash", { length: 64 }).notNull(),
+    requestFingerprint: varchar("request_fingerprint", {
+      length: 64,
+    }).notNull(),
+    receipt: varchar("receipt", { length: 40 }).notNull(),
+    razorpayOrderId: varchar("razorpay_order_id", { length: 64 }),
+    errorCode: varchar("error_code", { length: 64 }),
+    ...timestamps,
+  },
+  (table) => [
+    unique("checkout_attempts_roast_unique").on(table.roastId),
+    unique("checkout_attempts_request_key_unique").on(table.requestKeyHash),
+    unique("checkout_attempts_receipt_unique").on(table.receipt),
+    unique("checkout_attempts_order_unique").on(table.razorpayOrderId),
+    index("checkout_attempts_state_created_idx").on(
+      table.state,
+      table.createdAt,
+    ),
+    check(
+      "checkout_attempts_key_hash_check",
+      sql`${table.requestKeyHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "checkout_attempts_fingerprint_check",
+      sql`${table.requestFingerprint} ~ '^[0-9a-f]{64}$'`,
     ),
   ],
 );
@@ -310,6 +357,7 @@ export const productEvents = pgTable(
 
 export type RoastRecord = typeof roasts.$inferSelect;
 export type PaymentRecord = typeof payments.$inferSelect;
+export type CheckoutAttemptRecord = typeof checkoutAttempts.$inferSelect;
 export type AuditJobRecord = typeof auditJobs.$inferSelect;
 export type JobAttemptRecord = typeof jobAttempts.$inferSelect;
 export type WebhookEventRecord = typeof webhookEvents.$inferSelect;
