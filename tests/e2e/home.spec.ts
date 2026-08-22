@@ -66,6 +66,73 @@ test("does not fake checkout when valid details are entered", async ({
   ).toBeVisible();
 });
 
+test("opens Razorpay and reports only server-verified authorization", async ({
+  page,
+}) => {
+  const providerResponse = {
+    razorpay_order_id: "order_browserTest123",
+    razorpay_payment_id: "pay_browserTest456",
+    razorpay_signature: "a".repeat(64),
+  };
+  let verificationBody: unknown;
+  let checkoutScriptRequests = 0;
+  await page.route("https://checkout.razorpay.com/v1/checkout.js", (route) => {
+    checkoutScriptRequests += 1;
+    return route.fulfill({
+      contentType: "application/javascript",
+      body: `window.Razorpay = class {
+        constructor(options) { this.options = options; }
+        on() {}
+        open() { this.options.handler(${JSON.stringify(providerResponse)}); }
+      };`,
+    });
+  });
+  await page.route("**/api/checkout", (route) =>
+    route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        orderId: providerResponse.razorpay_order_id,
+        keyId: "rzp_test_browserSafe",
+        amount: 19_900,
+        currency: "INR",
+        name: "RoastMyLP",
+        description: "One screenshot-based landing page Roast",
+      }),
+    }),
+  );
+  await page.route("**/api/checkout/verify", async (route) => {
+    verificationBody = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "PAYMENT_AUTHORIZED" }),
+    });
+  });
+
+  await page.goto("/");
+  expect(checkoutScriptRequests).toBe(0);
+  await page.getByLabel("Landing page URL").fill("https://example.com");
+  await page
+    .getByLabel("Email for your private report")
+    .fill("buyer@example.com");
+  await page.getByLabel(/I agree to the service terms/).check();
+  await page
+    .getByLabel(/I understand this is an automated CRO opinion/)
+    .check();
+  await page
+    .getByRole("button", { name: "Roast my landing page — ₹199" })
+    .click();
+
+  await expect(
+    page.getByText(
+      "Payment authorization verified. We are confirming capture before starting your review.",
+    ),
+  ).toBeVisible();
+  expect(checkoutScriptRequests).toBe(1);
+  expect(verificationBody).toEqual(providerResponse);
+});
+
 test("has no horizontal overflow at 320 CSS pixels", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto("/");

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useRef, useState } from "react";
+import Script from "next/script";
 import { ROAST_PRICE_INR } from "@/lib/product";
 import {
   CHECKOUT_CONSENT_VERSION,
@@ -10,6 +11,30 @@ import {
 } from "@/lib/checkout-policy";
 
 type Errors = { url?: string; email?: string };
+
+type RazorpaySuccess = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayCheckout = new (options: {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  handler: (response: RazorpaySuccess) => void;
+  modal: { confirm_close: boolean; ondismiss: () => void };
+  theme: { color: string };
+}) => { open(): void; on(event: "payment.failed", handler: () => void): void };
+
+declare global {
+  interface Window {
+    Razorpay?: RazorpayCheckout;
+  }
+}
 
 function validateUrl(value: string): string | undefined {
   if (!value.trim()) return "Enter the landing page URL you want roasted.";
@@ -34,7 +59,28 @@ export function RoastIntakeForm() {
   const [errors, setErrors] = useState<Errors>({});
   const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [checkoutScriptRequested, setCheckoutScriptRequested] = useState(false);
   const idempotencyKey = useRef<string>("");
+  const checkoutScriptGate = useRef<{
+    promise: Promise<void>;
+    resolve: () => void;
+    reject: () => void;
+  } | null>(null);
+
+  function requestCheckoutScript() {
+    if (window.Razorpay) return Promise.resolve();
+    if (!checkoutScriptGate.current) {
+      let resolve = () => {};
+      let reject = () => {};
+      const promise = new Promise<void>((onLoad, onError) => {
+        resolve = onLoad;
+        reject = onError;
+      });
+      checkoutScriptGate.current = { promise, resolve, reject };
+      setCheckoutScriptRequested(true);
+    }
+    return checkoutScriptGate.current.promise;
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -54,7 +100,12 @@ export function RoastIntakeForm() {
 
     idempotencyKey.current ||= crypto.randomUUID();
     setSubmitting(true);
+    let checkoutOpened = false;
     try {
+      const scriptReady = requestCheckoutScript().then(
+        () => true,
+        () => false,
+      );
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -78,15 +129,77 @@ export function RoastIntakeForm() {
         );
         return;
       }
-      setNotice(
-        "Your order is ready. The secure Razorpay payment window will be connected in the next release; no payment has been taken.",
-      );
+      const order = (await response.json()) as {
+        orderId: string;
+        keyId: string;
+        amount: number;
+        currency: string;
+        name: string;
+        description: string;
+      };
+      if (!(await scriptReady)) {
+        setNotice(
+          "The payment window could not load. No payment was taken. Please try again.",
+        );
+        return;
+      }
+      if (!window.Razorpay) throw new Error("Checkout script unavailable");
+
+      let completed = false;
+      const checkout = new window.Razorpay({
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        name: order.name,
+        description: order.description,
+        order_id: order.orderId,
+        theme: { color: "#dfff00" },
+        modal: {
+          confirm_close: true,
+          ondismiss: () => {
+            if (!completed)
+              setNotice("Payment was not confirmed. You can safely try again.");
+            setSubmitting(false);
+          },
+        },
+        handler: async (payment) => {
+          try {
+            const verification = await fetch("/api/checkout/verify", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(payment),
+            });
+            if (!verification.ok) {
+              setNotice(
+                "We could not securely verify the payment response. Do not pay again; contact support with your Razorpay receipt.",
+              );
+              return;
+            }
+            completed = true;
+            setNotice(
+              "Payment authorization verified. We are confirming capture before starting your review.",
+            );
+          } catch {
+            setNotice(
+              "We could not securely verify the payment response. Do not pay again; contact support with your Razorpay receipt.",
+            );
+          } finally {
+            setSubmitting(false);
+          }
+        },
+      });
+      checkout.on("payment.failed", () => {
+        setNotice("Payment failed or was cancelled. No review has started.");
+        setSubmitting(false);
+      });
+      checkoutOpened = true;
+      checkout.open();
     } catch {
       setNotice(
         "Secure checkout is temporarily unavailable. No payment was taken.",
       );
     } finally {
-      setSubmitting(false);
+      if (!checkoutOpened) setSubmitting(false);
     }
   }
 
@@ -96,6 +209,14 @@ export function RoastIntakeForm() {
       className="border-rule bg-panel relative min-w-0 border-2 p-5 sm:p-7"
       aria-labelledby="form-heading"
     >
+      {checkoutScriptRequested ? (
+        <Script
+          src="https://checkout.razorpay.com/v1/checkout.js"
+          strategy="afterInteractive"
+          onLoad={() => checkoutScriptGate.current?.resolve()}
+          onError={() => checkoutScriptGate.current?.reject()}
+        />
+      ) : null}
       <div className="bg-signal text-ink absolute -top-px -left-px px-3 py-2 font-mono text-[0.65rem] font-bold tracking-[0.14em] uppercase">
         Case intake / ₹{ROAST_PRICE_INR}
       </div>

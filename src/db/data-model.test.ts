@@ -5,6 +5,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { normalizeCustomerEmail } from "./customer-data";
+import { DrizzleCheckoutRepository } from "./checkout-repository";
 import { findActiveReportAccess } from "./report-access-query";
 import {
   createReportAccessToken,
@@ -204,6 +205,43 @@ describe("POR-6 durable data model", () => {
       }),
     );
     expect(wrongAmount).toMatch(/payments_phase_1_amount_check/);
+  });
+
+  it("records POR-14 authorization once and rejects a different payment id", async () => {
+    const roast = await insertRoast();
+    await db.insert(payments).values({
+      roastId: roast.id,
+      razorpayOrderId: "order_por14Database1",
+      receipt: "receipt_por14_database_1",
+      amountPaise: 19_900,
+    });
+    const repository = new DrizzleCheckoutRepository(
+      db as unknown as ConstructorParameters<
+        typeof DrizzleCheckoutRepository
+      >[0],
+    );
+
+    await repository.recordAuthorizedPayment(
+      "order_por14Database1",
+      "pay_por14Database1",
+    );
+    await repository.recordAuthorizedPayment(
+      "order_por14Database1",
+      "pay_por14Database1",
+    );
+    await expect(
+      repository.recordAuthorizedPayment(
+        "order_por14Database1",
+        "pay_differentPayment1",
+      ),
+    ).rejects.toThrow(/conflicts with stored payment/);
+
+    await expect(
+      repository.findPaymentByOrder("order_por14Database1"),
+    ).resolves.toMatchObject({
+      state: "authorized",
+      razorpayPaymentId: "pay_por14Database1",
+    });
   });
 
   it("enforces one privacy-safe checkout attempt per request key, receipt, roast, and provider order", async () => {
