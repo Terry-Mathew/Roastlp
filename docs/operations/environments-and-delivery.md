@@ -21,7 +21,7 @@
 
 Configure the GitHub default branch as `main` after the repository's first commit, then enable a ruleset that:
 
-- requires a pull request and at least one approval;
+- requires a pull request; while Terry is the only collaborator, required external approvals are zero so the repository is not deadlocked—raise this to one when a second reviewer is added;
 - requires `Install, type-check, lint, test, audit and build`, `Secret scan`, and `Browser smoke test`;
 - requires the branch to be current and conversations resolved;
 - blocks force pushes and deletion; and
@@ -29,7 +29,7 @@ Configure the GitHub default branch as `main` after the repository's first commi
 
 In Vercel, disable deployments whose Git commit is not from the protected repository/default branch. Production is a manual promotion, not an automatic deployment from an unchecked local branch. Keep live Razorpay credentials absent until every Linear `launch-blocker` is Done.
 
-These controls cannot be proven by files alone. Add screenshots/exports of the GitHub ruleset and Vercel production-deployment settings to POR-8 before marking it Done.
+GitHub protection was verified through its API on 2026-08-23: checks are strict and apply to administrators; all three workflow jobs, linear history, and resolved conversations are required; force pushes and branch deletion are disabled. Add Vercel production-deployment evidence to POR-8 before marking it Done.
 
 ## Rollback
 
