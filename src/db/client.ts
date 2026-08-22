@@ -13,3 +13,5 @@ export function createDatabase(connectionString: string) {
     close: () => pool.end(),
   };
 }
+
+export type Database = ReturnType<typeof createDatabase>["db"];

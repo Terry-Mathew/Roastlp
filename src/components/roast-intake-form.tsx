@@ -2,6 +2,12 @@
 
 import { FormEvent, useRef, useState } from "react";
 import { ROAST_PRICE_INR } from "@/lib/product";
+import {
+  CHECKOUT_CONSENT_VERSION,
+  PRIVACY_NOTICE_VERSION,
+  REFUND_POLICY_VERSION,
+  TERMS_VERSION,
+} from "@/lib/checkout-policy";
 
 type Errors = { url?: string; email?: string };
 
@@ -27,8 +33,10 @@ export function RoastIntakeForm() {
   const emailRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [notice, setNotice] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const idempotencyKey = useRef<string>("");
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setNotice("");
     const form = new FormData(event.currentTarget);
@@ -39,9 +47,47 @@ export function RoastIntakeForm() {
     setErrors(nextErrors);
     if (nextErrors.url) return urlRef.current?.focus();
     if (nextErrors.email) return emailRef.current?.focus();
-    setNotice(
-      "Checkout isn’t live yet. Nothing was saved and no payment was taken.",
-    );
+    if (form.get("terms") !== "on" || form.get("automated") !== "on") {
+      setNotice("Accept both checkout disclosures before continuing.");
+      return;
+    }
+
+    idempotencyKey.current ||= crypto.randomUUID();
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: form.get("url"),
+          email: form.get("email"),
+          idempotencyKey: idempotencyKey.current,
+          consentVersion: CHECKOUT_CONSENT_VERSION,
+          privacyNoticeVersion: PRIVACY_NOTICE_VERSION,
+          termsVersion: TERMS_VERSION,
+          refundPolicyVersion: REFUND_POLICY_VERSION,
+          acceptsTermsAndPrivacy: true,
+          acknowledgesAutomatedReportAndRefundPolicy: true,
+        }),
+      });
+      if (!response.ok) {
+        setNotice(
+          response.status === 400
+            ? "Check the URL, email, and disclosures, then try again."
+            : "Secure checkout is temporarily unavailable. No payment was taken.",
+        );
+        return;
+      }
+      setNotice(
+        "Your order is ready. The secure Razorpay payment window will be connected in the next release; no payment has been taken.",
+      );
+    } catch {
+      setNotice(
+        "Secure checkout is temporarily unavailable. No payment was taken.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -144,17 +190,47 @@ export function RoastIntakeForm() {
           <a className="text-link" href="#privacy-heading">
             privacy
           </a>
-          .
+          . We also use a keyed, short-lived network signal and the submitted
+          domain to prevent checkout abuse; we do not store the raw IP in the
+          checkout ledger.
         </p>
+        <label className="mt-5 flex min-h-11 cursor-pointer items-start gap-3 text-sm leading-5">
+          <input
+            className="mt-1 size-4 shrink-0 accent-[var(--signal)]"
+            name="terms"
+            type="checkbox"
+            required
+          />
+          <span>
+            I agree to the service terms and privacy notice, and confirm
+            I&apos;m authorized to submit this public page.
+          </span>
+        </label>
+        <label className="mt-3 flex min-h-11 cursor-pointer items-start gap-3 text-sm leading-5">
+          <input
+            className="mt-1 size-4 shrink-0 accent-[var(--signal)]"
+            name="automated"
+            type="checkbox"
+            required
+          />
+          <span>
+            I understand this is an automated CRO opinion. Technical failures
+            are eligible for a refund under the refund policy; disagreement with
+            the opinion alone is not.
+          </span>
+        </label>
         <button
           type="submit"
+          disabled={submitting}
           className="cta focus-ring mt-5 min-h-12 w-full px-5 py-3 text-center font-mono text-sm font-black tracking-[0.06em] uppercase"
         >
-          Roast my landing page — ₹{ROAST_PRICE_INR}
+          {submitting
+            ? "Preparing secure checkout…"
+            : `Roast my landing page — ₹${ROAST_PRICE_INR}`}
         </button>
         <p className="text-muted mt-3 text-xs leading-5">
-          Automated CRO analysis. No account or subscription. Checkout remains
-          disabled until the payment integration is production-ready.
+          Automated CRO analysis. No account or subscription. Payment is not
+          complete until Razorpay confirms it on the server.
         </p>
         <p
           aria-live="polite"
