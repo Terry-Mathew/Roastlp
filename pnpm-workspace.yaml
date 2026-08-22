@@ -1,3 +1,6 @@
 allowBuilds:
+  esbuild: true
   sharp: false
   unrs-resolver: false
+minimumReleaseAgeExclude:
+  - "@electric-sql/pglite@0.5.6"
