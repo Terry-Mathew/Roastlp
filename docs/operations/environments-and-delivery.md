@@ -6,12 +6,12 @@
 
 ## Environment contract
 
-| Environment | Source                      | Data/providers                                                                  | Purpose                                 | Deployment rule                                                   |
-| ----------- | --------------------------- | ------------------------------------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------- |
-| Local       | Developer checkout          | Local/test credentials only; no production data                                 | Development and deterministic tests     | `.env.local` is ignored and created by the developer              |
-| Preview     | Pull request                | Isolated preview database branch and provider test credentials                  | Review each change                      | Vercel Preview; never production Razorpay keys or real buyer data |
-| Staging     | Persistent `staging` branch | Persistent staging DB and provider test modes, isolated from preview/production | Integration, webhook and go-live drills | Vercel Preview deployment after required GitHub checks pass       |
-| Production  | Protected `main` branch     | Production DB/regions and live credentials                                      | Live ₹199 service                       | Vercel Production deployment after a checked pull request merges  |
+| Environment | Source                     | Data/providers                                                                  | Purpose                                 | Deployment rule                                                   |
+| ----------- | -------------------------- | ------------------------------------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------- |
+| Local       | Developer checkout         | Local/test credentials only; no production data                                 | Development and deterministic tests     | `.env.local` is ignored and created by the developer              |
+| Preview     | Pull request               | Isolated preview database branch and provider test credentials                  | Review each change                      | Vercel Preview; never production Razorpay keys or real buyer data |
+| Staging     | Protected `staging` branch | Persistent staging DB and provider test modes, isolated from preview/production | Integration, webhook and go-live drills | Checked pull request merges, then Vercel deploys the merge commit |
+| Production  | Protected `main` branch    | Production DB/regions and live credentials                                      | Live ₹199 service                       | Vercel Production deployment after a checked pull request merges  |
 
 `APP_ENV` is one of `local`, `preview`, `staging`, or `production`. `APP_URL` and `NEXT_PUBLIC_APP_URL` must name the same environment. Server startup validation will be added with provider integrations; a production process must refuse test keys and a non-production process must refuse live Razorpay keys.
 
@@ -27,7 +27,7 @@ Configure the GitHub default branch as `main` after the repository's first commi
 - blocks force pushes and deletion; and
 - applies to administrators unless an audited emergency bypass is used.
 
-Vercel is connected to `Terry-Mathew/Roastlp`. It automatically creates Production deployments from `main` and protected Preview deployments from every other branch. On the Hobby plan, custom Vercel environments are unavailable, so `staging` is intentionally a persistent protected Preview branch rather than a Vercel custom environment. Keep live Razorpay credentials absent until every Linear `launch-blocker` is Done.
+Vercel is connected to `Terry-Mathew/Roastlp`. It automatically creates Production deployments from `main` and protected Preview deployments from every other branch. GitHub protects both `main` and `staging`: changes must pass the required checks before their pull request can merge, and Vercel deploys the resulting merge commit. Vercel does not wait for checks after a direct push, so direct pushes to either protected branch are prohibited and blocked. On the Hobby plan, custom Vercel environments are unavailable, so `staging` is intentionally a persistent protected Preview branch rather than a Vercel custom environment. Keep live Razorpay credentials absent until every Linear `launch-blocker` is Done.
 
 GitHub protection was verified through its API on 2026-08-23 IST (2026-08-22 UTC): checks are strict and apply to administrators; all three workflow jobs, linear history, and resolved conversations are required; force pushes and branch deletion are disabled. Vercel production deployment from merge commit `84c139f` was verified Ready at `https://roastlp.vercel.app`; Preview deployments require Vercel authentication. A unique-commit staging deployment, environment credential isolation, and rollback drill remain required before POR-8 is Done.
 
