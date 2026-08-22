@@ -29,7 +29,7 @@ Configure the GitHub default branch as `main` after the repository's first commi
 
 In Vercel, disable deployments whose Git commit is not from the protected repository/default branch. Production is a manual promotion, not an automatic deployment from an unchecked local branch. Keep live Razorpay credentials absent until every Linear `launch-blocker` is Done.
 
-GitHub protection was verified through its API on 2026-08-23: checks are strict and apply to administrators; all three workflow jobs, linear history, and resolved conversations are required; force pushes and branch deletion are disabled. Add Vercel production-deployment evidence to POR-8 before marking it Done.
+GitHub protection was verified through its API on 2026-08-23 IST (2026-08-22 UTC): checks are strict and apply to administrators; all three workflow jobs, linear history, and resolved conversations are required; force pushes and branch deletion are disabled. Add Vercel production-deployment evidence to POR-8 before marking it Done.
 
 ## Rollback
 
