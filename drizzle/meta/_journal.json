@@ -15,6 +15,13 @@
       "when": 1787429514553,
       "tag": "0001_state-transition-triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787431189976,
+      "tag": "0002_needy_gamma_corps",
+      "breakpoints": true
     }
   ]
 }

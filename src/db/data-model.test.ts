@@ -13,6 +13,7 @@ import {
 } from "./report-token";
 import {
   auditJobs,
+  checkoutAttempts,
   jobAttempts,
   payments,
   productEvents,
@@ -60,6 +61,8 @@ describe("POR-6 durable data model", () => {
         normalizedEmail: "buyer@example.com",
         consentVersion: "checkout-v1",
         privacyNoticeVersion: "privacy-v1",
+        termsVersion: "terms-v1",
+        refundPolicyVersion: "refund-v1",
         consentedAt: new Date("2026-08-23T00:00:00Z"),
       })
       .returning();
@@ -203,6 +206,35 @@ describe("POR-6 durable data model", () => {
     expect(wrongAmount).toMatch(/payments_phase_1_amount_check/);
   });
 
+  it("enforces one privacy-safe checkout attempt per request key, receipt, roast, and provider order", async () => {
+    const roast = await insertRoast();
+    const values = {
+      roastId: roast.id,
+      requestKeyHash: "a".repeat(64),
+      requestFingerprint: "b".repeat(64),
+      receipt: "r_secure_1",
+      razorpayOrderId: "order_secure_1",
+    } as const;
+    await db.insert(checkoutAttempts).values(values);
+    const duplicate = await insertRoast();
+    const failure = await captureDatabaseFailure(
+      db.insert(checkoutAttempts).values({
+        ...values,
+        roastId: duplicate.id,
+        receipt: "r_secure_2",
+        razorpayOrderId: "order_secure_2",
+      }),
+    );
+    expect(failure).toMatch(/checkout_attempts_request_key_unique/);
+
+    const stored = await client.query<Record<string, unknown>>(
+      `select * from checkout_attempts where roast_id = $1`,
+      [roast.id],
+    );
+    expect(JSON.stringify(stored.rows[0])).not.toContain("buyer@example.com");
+    expect(JSON.stringify(stored.rows[0])).not.toContain("93.184.216.34");
+  });
+
   it("stores only a token hash and exposes a customer-safe report projection", async () => {
     const roast = await insertRoast();
     const token = createReportAccessToken();
@@ -278,6 +310,8 @@ describe("POR-6 durable data model", () => {
         normalizedEmail: "Buyer@Example.COM ",
         consentVersion: "checkout-v1",
         privacyNoticeVersion: "privacy-v1",
+        termsVersion: "terms-v1",
+        refundPolicyVersion: "refund-v1",
         consentedAt: new Date(),
       }),
     );

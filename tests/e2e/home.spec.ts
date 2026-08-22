@@ -52,12 +52,16 @@ test("does not fake checkout when valid details are entered", async ({
   await page
     .getByLabel("Email for your private report")
     .fill("buyer@example.com");
+  await page.getByLabel(/I agree to the service terms/).check();
+  await page
+    .getByLabel(/I understand this is an automated CRO opinion/)
+    .check();
   await page
     .getByRole("button", { name: "Roast my landing page — ₹199" })
     .click();
   await expect(
     page.getByText(
-      "Checkout isn’t live yet. Nothing was saved and no payment was taken.",
+      "Secure checkout is temporarily unavailable. No payment was taken.",
     ),
   ).toBeVisible();
 });
