@@ -33,6 +33,15 @@ function json(status: number, body: object) {
   });
 }
 
+export interface WorkerRouteHooks {
+  /**
+   * Runs once per successful delivery, after the job state machine settled.
+   * Failures here must never fail the job itself: transactional side effects
+   * (e.g. POR-25 delivery email) keep durable ledger rows that sweeps retry.
+   */
+  onJobSucceeded?: (db: Database, jobId: string) => Promise<void>;
+}
+
 /**
  * QStash destination for audit-job deliveries.
  *
@@ -43,6 +52,7 @@ function json(status: number, body: object) {
 export function createAuditJobRoute(
   pipelineFactory: ((db: Database) => AuditPipeline) | null,
   env: WorkerEnv = process.env,
+  hooks: WorkerRouteHooks = {},
 ) {
   return async function POST(request: Request): Promise<Response> {
     if (!pipelineFactory)
@@ -101,6 +111,19 @@ export function createAuditJobRoute(
       if (!result.handled)
         // Another worker owns this job; QStash must not retry.
         return json(200, { status: "already_leased" });
+      if (result.outcome === "succeeded" && hooks.onJobSucceeded) {
+        try {
+          await hooks.onJobSucceeded(database.db, parsed.jobId);
+        } catch (error) {
+          // The audit succeeded; delivery side effects recover via sweeps.
+          console.error(
+            JSON.stringify({
+              event: "JOB_SUCCESS_HOOK_FAILED",
+              code: error instanceof Error ? error.name : "UNKNOWN",
+            }),
+          );
+        }
+      }
       return json(200, { status: result.outcome });
     } finally {
       await database.close();

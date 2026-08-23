@@ -18,6 +18,16 @@ export type RefundRequestOutcome =
   | { status: "retry_scheduled" }
   | { status: "failed_terminal" };
 
+export interface RefundNotificationHooks {
+  /**
+   * POR-25: the audit failed terminally and a refund was initiated. Fires
+   * once per terminal roast, before provider settlement is known.
+   */
+  onTerminalFailure?: (roastId: string) => Promise<void>;
+  /** POR-25: the refund reached a settled `succeeded` state. */
+  onRefundSettled?: (roastId: string) => Promise<void>;
+}
+
 export interface RefundServiceOptions {
   now?: () => Date;
   /**
@@ -25,6 +35,8 @@ export interface RefundServiceOptions {
    * with POR-31; failed refunds stay visible in the ledger until then.
    */
   alert?: (payload: Record<string, unknown>) => void;
+  /** Transactional email hooks; failures never break the money path. */
+  notify?: RefundNotificationHooks;
 }
 
 function defaultAlert(payload: Record<string, unknown>): void {
@@ -117,9 +129,23 @@ export class RefundService {
       razorpayPaymentId: payment.razorpayPaymentId,
       amountPaise: payment.amountPaise,
     });
-    if (outcome.status === "succeeded")
+    await this.safeNotify("onTerminalFailure", roastId);
+    if (outcome.status === "succeeded") {
       await this.settleSucceededSideEffects(payment.id, roastId);
+    }
     return outcome;
+  }
+
+  /** Notification failures must never break the money path. */
+  private async safeNotify(
+    hook: keyof RefundNotificationHooks,
+    roastId: string,
+  ): Promise<void> {
+    try {
+      await this.options.notify?.[hook]?.(roastId);
+    } catch {
+      // Email ledger rows recover via sweeps; nothing to escalate here.
+    }
   }
 
   /** Reconciles unsettled refunds against the provider until terminal. */
@@ -288,6 +314,7 @@ export class RefundService {
     // already-terminal refunds make this a no-op.
     await this.repository.moveRoastToRefundPending(roastId);
     await this.repository.settleRoastRefunded(roastId);
+    await this.safeNotify("onRefundSettled", roastId);
   }
 
   private alert(refundId: string | null, code: string): void {

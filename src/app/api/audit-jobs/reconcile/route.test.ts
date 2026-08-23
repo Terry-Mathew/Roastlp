@@ -99,6 +99,7 @@ describe("POR-17 reconciler boundary", () => {
       scanned: 0,
       enqueued: 0,
       skipped: 0,
+      emailsRetried: 0,
     });
   });
 });
