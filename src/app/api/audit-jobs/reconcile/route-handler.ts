@@ -46,7 +46,14 @@ export function createReconcileRoute(
 ) {
   return async function POST(request: Request): Promise<Response> {
     if ((!env.databaseUrl && !env.db) || !env.reconcileSecret)
-      return json(503, { error: "RECONCILER_UNAVAILABLE", diag: { db: !!env.db, databaseUrl: !!env.databaseUrl, secret: !!env.reconcileSecret } });
+      return json(503, {
+        error: "RECONCILER_UNAVAILABLE",
+        diag: {
+          db: !!env.db,
+          databaseUrl: !!env.databaseUrl,
+          secret: !!env.reconcileSecret,
+        },
+      });
 
     const url = new URL(request.url);
     const presented =
