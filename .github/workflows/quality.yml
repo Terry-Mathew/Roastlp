@@ -26,7 +26,7 @@ jobs:
           version: 11.22.0
       - uses: actions/setup-node@v6
         with:
-          node-version: 26.3.0
+          node-version: 24.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
@@ -59,7 +59,7 @@ jobs:
           version: 11.22.0
       - uses: actions/setup-node@v6
         with:
-          node-version: 26.3.0
+          node-version: 24.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
