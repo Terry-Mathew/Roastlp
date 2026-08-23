@@ -10,6 +10,7 @@ export interface PersistedReport {
 }
 
 export interface ResolvedReportAccess {
+  roastId: string;
   hostname: string;
   report: unknown;
   model: string;
@@ -139,6 +140,7 @@ export class DrizzleReportRepository {
     if (!report) return undefined;
 
     return {
+      roastId: grant.roastId,
       hostname: roast.hostname,
       report: report.report,
       model: report.model,
