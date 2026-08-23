@@ -6,10 +6,8 @@ import { createDatabase } from "../../../db/client";
 import { DrizzleReportRepository } from "../../../db/report-repository";
 import { PRODUCT_NAME } from "../../../lib/product";
 import { isValidViewKeyFormat } from "../../../lib/view-key";
-import {
-  ReportView,
-  type ReportViewData,
-} from "../../../components/report-view";
+import { createScorecardToken } from "../../../lib/scorecard-token";
+import { ReportView } from "../../../components/report-view";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +17,7 @@ export const metadata: Metadata = {
   other: { referrer: "no-referrer" },
 };
 
-async function resolveAccess(
-  token: string,
-): Promise<ReportViewData | undefined> {
+async function resolveAccess(token: string) {
   if (!isValidViewKeyFormat(token)) return undefined;
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) return undefined;
@@ -51,6 +47,11 @@ export default async function ReportPage({
   const access = await resolveAccess(token);
   if (!access) notFound();
 
+  const hmacKey = process.env.ABUSE_SIGNAL_HMAC_KEY;
+  const scorecardPath = hmacKey
+    ? `/api/scorecard/${createScorecardToken(hmacKey, access.roastId)}`
+    : undefined;
+
   return (
     <main className="bg-ink text-paper min-h-screen">
       <header className="border-rule border-b">
@@ -65,6 +66,7 @@ export default async function ReportPage({
         hostname={access.hostname}
         report={access.report}
         model={access.model}
+        scorecardPath={scorecardPath}
       />
       <footer className="border-rule page-shell text-muted border-t py-8 font-mono text-[0.68rem] tracking-[0.12em] uppercase">
         <Link href="/" className="focus-ring text-signal">

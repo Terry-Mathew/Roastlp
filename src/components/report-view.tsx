@@ -27,10 +27,24 @@ export interface ReportViewData {
   hostname: string;
   report: unknown;
   model: string;
+  /** Signed, short-lived scorecard image path; absent when HMAC key unset. */
+  scorecardPath?: string;
 }
 
-export function ReportView({ hostname, report, model }: ReportViewData) {
+export function ReportView({
+  hostname,
+  report,
+  model,
+  scorecardPath,
+}: ReportViewData) {
   const parsed = report as StoredRoastReport;
+  // Customer-editable prefill; the link goes to the public homepage, never
+  // to this private report or its capability URL.
+  const shareText = encodeURIComponent(
+    `My landing page scored ${parsed.score}/100 — verdict: ${parsed.verdict}. Brutal, honest CRO feedback in about a minute.`,
+  );
+  const shareUrl = encodeURIComponent("https://roastmylp.in");
+  const shareIntent = `https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`;
 
   return (
     <article className="page-shell py-10 sm:py-14">
@@ -113,6 +127,41 @@ export function ReportView({ hostname, report, model }: ReportViewData) {
           </p>
         </div>
       </section>
+
+      {scorecardPath ? (
+        <section
+          aria-labelledby="share-heading"
+          className="border-rule bg-panel mt-12 border p-5 sm:p-6"
+        >
+          <h2
+            id="share-heading"
+            className="font-mono text-sm tracking-[0.14em] uppercase"
+          >
+            Show off the damage
+          </h2>
+          <p className="text-muted mt-2 max-w-prose text-sm leading-6">
+            The scorecard image contains only your domain, score, and verdict —
+            never this private link. Sharing opens X with editable copy.
+          </p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <a
+              href={scorecardPath}
+              download={`roastmylp-${hostname}-scorecard.png`}
+              className="cta focus-ring min-h-12 px-5 py-3 text-center font-mono text-sm font-black tracking-[0.06em] uppercase"
+            >
+              Download scorecard PNG
+            </a>
+            <a
+              href={shareIntent}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="focus-ring border-rule min-h-12 border px-5 py-3 text-center font-mono text-sm font-bold tracking-[0.06em] uppercase hover:border-[var(--signal)]"
+            >
+              Share on X
+            </a>
+          </div>
+        </section>
+      ) : null}
 
       <p className="text-muted mt-12 font-mono text-[0.65rem] tracking-[0.12em] uppercase">
         Automated analysis · model {model} · this link is private and revocable
