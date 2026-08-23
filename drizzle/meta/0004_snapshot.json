@@ -108,12 +108,8 @@
           "name": "audit_jobs_roast_id_roasts_id_fk",
           "tableFrom": "audit_jobs",
           "tableTo": "roasts",
-          "columnsFrom": [
-            "roast_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["roast_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -123,16 +119,12 @@
         "audit_jobs_roast_unique": {
           "name": "audit_jobs_roast_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "roast_id"
-          ]
+          "columns": ["roast_id"]
         },
         "audit_jobs_qstash_message_unique": {
           "name": "audit_jobs_qstash_message_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "qstash_message_id"
-          ]
+          "columns": ["qstash_message_id"]
         }
       },
       "policies": {},
@@ -237,12 +229,8 @@
           "name": "checkout_attempts_roast_id_roasts_id_fk",
           "tableFrom": "checkout_attempts",
           "tableTo": "roasts",
-          "columnsFrom": [
-            "roast_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["roast_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -252,30 +240,22 @@
         "checkout_attempts_roast_unique": {
           "name": "checkout_attempts_roast_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "roast_id"
-          ]
+          "columns": ["roast_id"]
         },
         "checkout_attempts_request_key_unique": {
           "name": "checkout_attempts_request_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "request_key_hash"
-          ]
+          "columns": ["request_key_hash"]
         },
         "checkout_attempts_receipt_unique": {
           "name": "checkout_attempts_receipt_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "receipt"
-          ]
+          "columns": ["receipt"]
         },
         "checkout_attempts_order_unique": {
           "name": "checkout_attempts_order_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "razorpay_order_id"
-          ]
+          "columns": ["razorpay_order_id"]
         }
       },
       "policies": {},
@@ -390,12 +370,8 @@
           "name": "email_deliveries_roast_id_roasts_id_fk",
           "tableFrom": "email_deliveries",
           "tableTo": "roasts",
-          "columnsFrom": [
-            "roast_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["roast_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -405,24 +381,17 @@
         "email_deliveries_idempotency_key_unique": {
           "name": "email_deliveries_idempotency_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "idempotency_key_hash"
-          ]
+          "columns": ["idempotency_key_hash"]
         },
         "email_deliveries_provider_message_unique": {
           "name": "email_deliveries_provider_message_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "provider_message_id"
-          ]
+          "columns": ["provider_message_id"]
         },
         "email_deliveries_roast_kind_unique": {
           "name": "email_deliveries_roast_kind_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "roast_id",
-            "kind"
-          ]
+          "columns": ["roast_id", "kind"]
         }
       },
       "policies": {},
@@ -498,12 +467,8 @@
           "name": "job_attempts_audit_job_id_audit_jobs_id_fk",
           "tableFrom": "job_attempts",
           "tableTo": "audit_jobs",
-          "columnsFrom": [
-            "audit_job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["audit_job_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -513,10 +478,7 @@
         "job_attempts_job_number_unique": {
           "name": "job_attempts_job_number_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "audit_job_id",
-            "attempt_number"
-          ]
+          "columns": ["audit_job_id", "attempt_number"]
         }
       },
       "policies": {},
@@ -639,12 +601,8 @@
           "name": "payments_roast_id_roasts_id_fk",
           "tableFrom": "payments",
           "tableTo": "roasts",
-          "columnsFrom": [
-            "roast_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["roast_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -654,23 +612,17 @@
         "payments_razorpay_order_unique": {
           "name": "payments_razorpay_order_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "razorpay_order_id"
-          ]
+          "columns": ["razorpay_order_id"]
         },
         "payments_razorpay_payment_unique": {
           "name": "payments_razorpay_payment_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "razorpay_payment_id"
-          ]
+          "columns": ["razorpay_payment_id"]
         },
         "payments_receipt_unique": {
           "name": "payments_receipt_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "receipt"
-          ]
+          "columns": ["receipt"]
         }
       },
       "policies": {},
@@ -773,12 +725,8 @@
           "name": "product_events_roast_id_roasts_id_fk",
           "tableFrom": "product_events",
           "tableTo": "roasts",
-          "columnsFrom": [
-            "roast_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["roast_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -893,12 +841,8 @@
           "name": "refunds_payment_id_payments_id_fk",
           "tableFrom": "refunds",
           "tableTo": "payments",
-          "columnsFrom": [
-            "payment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["payment_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -908,16 +852,12 @@
         "refunds_idempotency_key_unique": {
           "name": "refunds_idempotency_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "idempotency_key"
-          ]
+          "columns": ["idempotency_key"]
         },
         "refunds_razorpay_refund_unique": {
           "name": "refunds_razorpay_refund_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "razorpay_refund_id"
-          ]
+          "columns": ["razorpay_refund_id"]
         }
       },
       "policies": {},
@@ -989,12 +929,8 @@
           "name": "report_access_grants_roast_id_roasts_id_fk",
           "tableFrom": "report_access_grants",
           "tableTo": "roasts",
-          "columnsFrom": [
-            "roast_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["roast_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1004,9 +940,7 @@
         "report_access_token_hash_unique": {
           "name": "report_access_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         }
       },
       "policies": {},
@@ -1061,12 +995,8 @@
           "name": "roast_reports_roast_id_roasts_id_fk",
           "tableFrom": "roast_reports",
           "tableTo": "roasts",
-          "columnsFrom": [
-            "roast_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["roast_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1076,9 +1006,7 @@
         "roast_reports_roast_unique": {
           "name": "roast_reports_roast_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "roast_id"
-          ]
+          "columns": ["roast_id"]
         }
       },
       "policies": {},
@@ -1343,10 +1271,7 @@
         "webhook_provider_event_unique": {
           "name": "webhook_provider_event_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "provider",
-            "provider_event_id"
-          ]
+          "columns": ["provider", "provider_event_id"]
         }
       },
       "policies": {},
@@ -1375,31 +1300,17 @@
     "public.checkout_attempt_state": {
       "name": "checkout_attempt_state",
       "schema": "public",
-      "values": [
-        "order_creating",
-        "order_created",
-        "failed"
-      ]
+      "values": ["order_creating", "order_created", "failed"]
     },
     "public.email_kind": {
       "name": "email_kind",
       "schema": "public",
-      "values": [
-        "result",
-        "processing_failure",
-        "refund_completed"
-      ]
+      "values": ["result", "processing_failure", "refund_completed"]
     },
     "public.email_state": {
       "name": "email_state",
       "schema": "public",
-      "values": [
-        "pending",
-        "sent",
-        "failed",
-        "bounced",
-        "complained"
-      ]
+      "values": ["pending", "sent", "failed", "bounced", "complained"]
     },
     "public.job_attempt_state": {
       "name": "job_attempt_state",
@@ -1452,12 +1363,7 @@
     "public.refund_state": {
       "name": "refund_state",
       "schema": "public",
-      "values": [
-        "requested",
-        "processing",
-        "succeeded",
-        "failed"
-      ]
+      "values": ["requested", "processing", "succeeded", "failed"]
     },
     "public.roast_state": {
       "name": "roast_state",
@@ -1477,13 +1383,7 @@
     "public.webhook_state": {
       "name": "webhook_state",
       "schema": "public",
-      "values": [
-        "received",
-        "processing",
-        "processed",
-        "failed",
-        "rejected"
-      ]
+      "values": ["received", "processing", "processed", "failed", "rejected"]
     }
   },
   "schemas": {},
