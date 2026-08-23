@@ -5,6 +5,21 @@ const identifier = z
   .string()
   .regex(/^[A-Za-z0-9_.:-]+$/)
   .max(128);
+const refundEntitySchema = z
+  .object({
+    id: z
+      .string()
+      .regex(/^rfnd_[A-Za-z0-9]+$/)
+      .max(64),
+    entity: z.literal("refund"),
+    payment_id: z
+      .string()
+      .regex(/^pay_[A-Za-z0-9]+$/)
+      .max(64),
+    status: z.enum(["pending", "processed", "failed"]),
+  })
+  .passthrough();
+
 const paymentEntitySchema = z
   .object({
     id: z
@@ -33,10 +48,14 @@ const envelopeSchema = z
   .passthrough();
 
 export type SupportedRazorpayEvent =
-  "payment.captured" | "order.paid" | "payment.failed";
+  | "payment.captured"
+  | "order.paid"
+  | "payment.failed"
+  | "refund.processed"
+  | "refund.failed";
 
-export interface SanitizedRazorpayEvent {
-  eventType: SupportedRazorpayEvent;
+export interface SanitizedPaymentEvent {
+  eventType: "payment.captured" | "order.paid" | "payment.failed";
   paymentId: string;
   orderId: string;
   status: "captured" | "failed";
@@ -45,6 +64,16 @@ export interface SanitizedRazorpayEvent {
   captured: boolean;
   providerCreatedAt: number;
 }
+
+export interface SanitizedRefundEvent {
+  eventType: "refund.processed" | "refund.failed";
+  refundId: string;
+  paymentId: string;
+  providerCreatedAt: number;
+}
+
+export type SanitizedRazorpayEvent =
+  SanitizedPaymentEvent | SanitizedRefundEvent;
 
 export function payloadDigest(rawBody: Uint8Array) {
   return createHash("sha256").update(rawBody).digest("hex");
@@ -72,10 +101,38 @@ export function parseRazorpayWebhook(
   | { supported: false; eventType: string; providerCreatedAt: number } {
   const raw: unknown = JSON.parse(Buffer.from(rawBody).toString("utf8"));
   const envelope = envelopeSchema.parse(raw);
+  const REFUND_EVENTS = ["refund.processed", "refund.failed"] as const;
+  const PAYMENT_EVENTS = [
+    "payment.captured",
+    "order.paid",
+    "payment.failed",
+  ] as const;
+
   if (
-    !["payment.captured", "order.paid", "payment.failed"].includes(
-      envelope.event,
-    )
+    REFUND_EVENTS.includes(envelope.event as (typeof REFUND_EVENTS)[number])
+  ) {
+    const refundContainer = z
+      .object({ entity: refundEntitySchema })
+      .passthrough()
+      .parse(envelope.payload.refund);
+    const refund = refundContainer.entity;
+    const expectedStatus =
+      envelope.event === "refund.processed" ? "processed" : "failed";
+    if (refund.status !== expectedStatus)
+      throw new Error("Webhook event and refund snapshot disagree");
+    return {
+      supported: true,
+      event: {
+        eventType: envelope.event as SanitizedRefundEvent["eventType"],
+        refundId: refund.id,
+        paymentId: refund.payment_id,
+        providerCreatedAt: envelope.created_at,
+      },
+    };
+  }
+
+  if (
+    !PAYMENT_EVENTS.includes(envelope.event as (typeof PAYMENT_EVENTS)[number])
   )
     return {
       supported: false,
@@ -100,7 +157,7 @@ export function parseRazorpayWebhook(
   return {
     supported: true,
     event: {
-      eventType: envelope.event as SupportedRazorpayEvent,
+      eventType: envelope.event as SanitizedPaymentEvent["eventType"],
       paymentId: payment.id,
       orderId: payment.order_id,
       status: payment.status as "captured" | "failed",

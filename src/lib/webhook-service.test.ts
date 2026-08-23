@@ -11,7 +11,7 @@ import type {
   ReconciledOrder,
   ReconciledPayment,
 } from "./razorpay-reconciliation";
-import type { SanitizedRazorpayEvent } from "./razorpay-webhook";
+import type { SanitizedPaymentEvent } from "./razorpay-webhook";
 import {
   ingestRazorpayWebhook,
   processRazorpayWebhook,
@@ -124,7 +124,7 @@ class Provider implements RazorpayReconciliationProvider {
   }
 }
 
-function captured(overrides: Partial<SanitizedRazorpayEvent> = {}) {
+function captured(overrides: Partial<SanitizedPaymentEvent> = {}) {
   return {
     supported: true as const,
     event: {
