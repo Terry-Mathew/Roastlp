@@ -355,6 +355,22 @@ export const productEvents = pgTable(
   ],
 );
 
+export const roastReports = pgTable(
+  "roast_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roastId: uuid("roast_id")
+      .notNull()
+      .references(() => roasts.id, { onDelete: "restrict" }),
+    report: jsonb("report").notNull(),
+    model: varchar("model", { length: 64 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [unique("roast_reports_roast_unique").on(table.roastId)],
+);
+
 export type RoastRecord = typeof roasts.$inferSelect;
 export type PaymentRecord = typeof payments.$inferSelect;
 export type CheckoutAttemptRecord = typeof checkoutAttempts.$inferSelect;

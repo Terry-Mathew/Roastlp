@@ -52,9 +52,7 @@ describe("POR-17 audit worker boundary", () => {
 
   it("rejects missing and invalid signatures with 401", async () => {
     const handler = createAuditJobRoute(
-      async () => ({
-        classification: "succeeded",
-      }),
+      () => async () => ({ classification: "succeeded" as const }),
       {
         databaseUrl: "postgres://unused",
         qstashCurrentSigningKey: CURRENT_KEY,
@@ -74,9 +72,7 @@ describe("POR-17 audit worker boundary", () => {
 
   it("reports unavailable rather than processing when environment is incomplete", async () => {
     const handler = createAuditJobRoute(
-      async () => ({
-        classification: "succeeded",
-      }),
+      () => async () => ({ classification: "succeeded" as const }),
       {},
     );
     const response = await handler(post("{}", undefined));
