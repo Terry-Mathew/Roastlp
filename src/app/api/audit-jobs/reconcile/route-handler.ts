@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
+import { timingSafeEqual } from "node:crypto";
 
-import { createDatabase } from "../../../../db/client";
+import { createDatabase, type Database } from "../../../../db/client";
 import { DrizzleJobRepository } from "../../../../db/job-repository";
 import { roasts } from "../../../../db/schema";
 import { JobService } from "../../../../lib/job-service";
@@ -29,28 +30,39 @@ export interface ReconcilerEnv {
   reconcileSecret?: string;
   qstashToken?: string;
   workerUrl?: string;
-  [key: string]: string | undefined;
+  /** Injectable for tests; overrides databaseUrl when present. */
+  db?: Database;
 }
 
 /**
  * Scheduled recovery sweep. Re-enqueues paid-but-unqueued jobs and re-drives
  * retry-due or stuck-lease jobs by republishing them to the QStash worker.
- * Protected by a shared secret; intended for cron invocation.
+ * Protected by a shared secret supplied either as the `x-reconcile-secret`
+ * header (manual/curl) or a `?secret=` query parameter (Vercel Cron, which
+ * cannot send custom headers).
  */
-export function createReconcileRoute(env: ReconcilerEnv = process.env) {
+export function createReconcileRoute(
+  env: ReconcilerEnv = process.env as unknown as ReconcilerEnv,
+) {
   return async function POST(request: Request): Promise<Response> {
-    if (!env.databaseUrl || !env.reconcileSecret)
+    if ((!env.databaseUrl && !env.db) || !env.reconcileSecret)
       return json(503, { error: "RECONCILER_UNAVAILABLE" });
 
-    const secretHeader = request.headers.get("x-reconcile-secret");
+    const url = new URL(request.url);
+    const presented =
+      request.headers.get("x-reconcile-secret") ??
+      url.searchParams.get("secret") ??
+      "";
+    const expected = env.reconcileSecret;
     if (
-      !secretHeader ||
-      secretHeader.length !== env.reconcileSecret.length ||
-      secretHeader !== env.reconcileSecret
+      presented.length !== expected.length ||
+      !timingSafeEqual(Buffer.from(presented), Buffer.from(expected))
     )
       return json(401, { error: "UNAUTHORIZED" });
 
-    const database = createDatabase(env.databaseUrl);
+    const database = env.db
+      ? { db: env.db, close: async () => {} }
+      : createDatabase(env.databaseUrl!);
     try {
       const service = new JobService(database.db);
       const repository = new DrizzleJobRepository(database.db);
