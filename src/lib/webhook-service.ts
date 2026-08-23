@@ -5,13 +5,24 @@ import {
   WebhookCollisionError,
 } from "../db/webhook-repository";
 import type { RazorpayReconciliationProvider } from "./razorpay-reconciliation";
-import type { SanitizedRazorpayEvent } from "./razorpay-webhook";
+import type {
+  SanitizedPaymentEvent,
+  SanitizedRazorpayEvent,
+} from "./razorpay-webhook";
 
 export class RetryableWebhookError extends Error {}
+
+export interface RefundWebhookApplier {
+  applyProviderRefundEvent(
+    razorpayRefundId: string,
+    outcome: "succeeded" | "failed",
+  ): Promise<boolean>;
+}
 
 export interface WebhookServiceDependencies {
   repository: WebhookRepository;
   provider: RazorpayReconciliationProvider;
+  refunds?: RefundWebhookApplier;
   now?: () => Date;
 }
 
@@ -35,20 +46,39 @@ const storedPayloadSchema = z.object({
   providerCreatedAt: z.number().int().nonnegative(),
 });
 
+const refundStoredPayloadSchema = z.object({
+  refundId: z
+    .string()
+    .regex(/^rfnd_[A-Za-z0-9]+$/)
+    .max(64),
+  paymentId: z
+    .string()
+    .regex(/^pay_[A-Za-z0-9]+$/)
+    .max(64),
+  providerCreatedAt: z.number().int().nonnegative(),
+});
+
 function safePayload(parsed: ParsedWebhook): Record<string, unknown> {
   if (!parsed.supported)
     return {
       eventType: parsed.eventType,
       providerCreatedAt: parsed.providerCreatedAt,
     };
+  if ("refundId" in parsed.event)
+    return {
+      refundId: parsed.event.refundId,
+      paymentId: parsed.event.paymentId,
+      providerCreatedAt: parsed.event.providerCreatedAt,
+    };
+  const event: SanitizedPaymentEvent = parsed.event;
   return {
-    paymentId: parsed.event.paymentId,
-    orderId: parsed.event.orderId,
-    status: parsed.event.status,
-    amount: parsed.event.amount,
-    currency: parsed.event.currency,
-    captured: parsed.event.captured,
-    providerCreatedAt: parsed.event.providerCreatedAt,
+    paymentId: event.paymentId,
+    orderId: event.orderId,
+    status: event.status,
+    amount: event.amount,
+    currency: event.currency,
+    captured: event.captured,
+    providerCreatedAt: event.providerCreatedAt,
   };
 }
 
@@ -88,20 +118,52 @@ export async function processStoredRazorpayWebhook(
   if (!(await deps.repository.claim(stored.id)))
     return { status: "DUPLICATE" as const };
   if (
-    !["payment.captured", "order.paid", "payment.failed"].includes(
-      stored.eventType,
-    )
+    [
+      "payment.captured",
+      "order.paid",
+      "payment.failed",
+      "refund.processed",
+      "refund.failed",
+    ].includes(stored.eventType)
   ) {
+    // Handled below.
+  } else {
     await deps.repository.reject(stored.id, "UNSUPPORTED_EVENT");
     return { status: "IGNORED" as const };
   }
+
+  if (
+    stored.eventType === "refund.processed" ||
+    stored.eventType === "refund.failed"
+  ) {
+    const refundPayload = refundStoredPayloadSchema.safeParse(
+      stored.verifiedPayload,
+    );
+    if (!refundPayload.success) {
+      await deps.repository.reject(stored.id, "INVALID_STORED_EVENT");
+      return { status: "REJECTED" as const };
+    }
+    if (deps.refunds) {
+      await deps.refunds.applyProviderRefundEvent(
+        refundPayload.data.refundId,
+        stored.eventType === "refund.processed" ? "succeeded" : "failed",
+      );
+    } else {
+      // No refund applier configured; keep the event for replay.
+      await deps.repository.fail(stored.id, "REFUND_APPLIER_UNAVAILABLE");
+      throw new RetryableWebhookError("Refund applier is unavailable");
+    }
+    await deps.repository.completeInformational(stored.id);
+    return { status: "REFUND_SYNCED" as const };
+  }
+
   const payload = storedPayloadSchema.safeParse(stored.verifiedPayload);
   if (!payload.success) {
     await deps.repository.reject(stored.id, "INVALID_STORED_EVENT");
     return { status: "REJECTED" as const };
   }
-  const event: SanitizedRazorpayEvent = {
-    eventType: stored.eventType as SanitizedRazorpayEvent["eventType"],
+  const event: SanitizedPaymentEvent = {
+    eventType: stored.eventType as SanitizedPaymentEvent["eventType"],
     ...payload.data,
   };
 
