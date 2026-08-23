@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { createDatabase } from "../../../../db/client";
+import { createDatabase, type Database } from "../../../../db/client";
 import { JobService, type AuditPipeline } from "../../../../lib/job-service";
 import {
   QStashReceiver,
@@ -36,16 +36,16 @@ function json(status: number, body: object) {
 /**
  * QStash destination for audit-job deliveries.
  *
- * The pipeline itself is injected so the orchestration layer stays testable
- * and the capture/analyze stages (POR-19) can be composed in without
- * touching this boundary again.
+ * The pipeline is injected as a factory over the request-scoped database so
+ * the orchestration layer stays testable and stage implementations can be
+ * composed in without touching this boundary again.
  */
 export function createAuditJobRoute(
-  pipeline: AuditPipeline | null,
+  pipelineFactory: ((db: Database) => AuditPipeline) | null,
   env: WorkerEnv = process.env,
 ) {
   return async function POST(request: Request): Promise<Response> {
-    if (!pipeline)
+    if (!pipelineFactory)
       // No configured pipeline yet: refuse without leasing or consuming any
       // attempt budget. QStash's own retries plus the reconciler keep the
       // audit recoverable.
@@ -94,7 +94,10 @@ export function createAuditJobRoute(
     const database = createDatabase(env.databaseUrl);
     try {
       const service = new JobService(database.db);
-      const result = await service.processDelivery(parsed.jobId, pipeline);
+      const result = await service.processDelivery(
+        parsed.jobId,
+        pipelineFactory(database.db),
+      );
       if (!result.handled)
         // Another worker owns this job; QStash must not retry.
         return json(200, { status: "already_leased" });
