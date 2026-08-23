@@ -80,6 +80,20 @@ export const refundState = pgEnum("refund_state", [
   "failed",
 ]);
 
+export const emailKind = pgEnum("email_kind", [
+  "result",
+  "processing_failure",
+  "refund_completed",
+]);
+
+export const emailState = pgEnum("email_state", [
+  "pending",
+  "sent",
+  "failed",
+  "bounced",
+  "complained",
+]);
+
 export const productEventName = pgEnum("product_event_name", [
   "checkout_created",
   "payment_captured",
@@ -369,6 +383,43 @@ export const roastReports = pgTable(
       .defaultNow(),
   },
   (table) => [unique("roast_reports_roast_unique").on(table.roastId)],
+);
+
+export const emailDeliveries = pgTable(
+  "email_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roastId: uuid("roast_id")
+      .notNull()
+      .references(() => roasts.id, { onDelete: "restrict" }),
+    kind: emailKind("kind").notNull(),
+    state: emailState("state").notNull().default("pending"),
+    /** SHA-256 of the provider idempotency key; the raw key is never stored. */
+    idempotencyKeyHash: varchar("idempotency_key_hash", {
+      length: 64,
+    }).notNull(),
+    providerMessageId: varchar("provider_message_id", { length: 128 }),
+    lastErrorCode: varchar("last_error_code", { length: 64 }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    unique("email_deliveries_idempotency_key_unique").on(
+      table.idempotencyKeyHash,
+    ),
+    unique("email_deliveries_provider_message_unique").on(
+      table.providerMessageId,
+    ),
+    unique("email_deliveries_roast_kind_unique").on(table.roastId, table.kind),
+    index("email_deliveries_state_created_idx").on(
+      table.state,
+      table.createdAt,
+    ),
+    check(
+      "email_deliveries_key_hash_check",
+      sql`${table.idempotencyKeyHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
 );
 
 export type RoastRecord = typeof roasts.$inferSelect;

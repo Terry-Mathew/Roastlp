@@ -2,18 +2,44 @@ import { eq } from "drizzle-orm";
 import { timingSafeEqual } from "node:crypto";
 
 import { createDatabase, type Database } from "../../../../db/client";
+import { DrizzleEmailRepository } from "../../../../db/email-repository";
 import { DrizzleJobRepository } from "../../../../db/job-repository";
 import { roasts } from "../../../../db/schema";
+import { EmailSender } from "../../../../lib/email-service";
 import { JobService } from "../../../../lib/job-service";
 import {
   QStashClient,
   QStashPublishError,
 } from "../../../../lib/qstash-client";
+import { createResendClient } from "../../../../lib/resend-client";
+import { deriveReportViewKey } from "../../../../lib/view-key";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const RECONCILE_BATCH = 25;
+const EMAIL_SWEEP_BATCH = 25;
+
+/** Re-drives one ledgered delivery through its kind-specific template. */
+async function retryPendingEmail(
+  sender: EmailSender,
+  delivery: {
+    roastId: string;
+    kind: "result" | "processing_failure" | "refund_completed";
+  },
+  hmacKey: string,
+): Promise<boolean> {
+  const outcome =
+    delivery.kind === "result"
+      ? await sender.sendResultEmail({
+          roastId: delivery.roastId,
+          viewKey: deriveReportViewKey(hmacKey, delivery.roastId),
+        })
+      : delivery.kind === "processing_failure"
+        ? await sender.sendProcessingFailureEmail({ roastId: delivery.roastId })
+        : await sender.sendRefundCompletedEmail({ roastId: delivery.roastId });
+  return outcome.status === "sent";
+}
 
 function json(status: number, body: object) {
   return new Response(JSON.stringify(body), {
@@ -30,6 +56,10 @@ export interface ReconcilerEnv {
   reconcileSecret?: string;
   qstashToken?: string;
   workerUrl?: string;
+  resendApiKey?: string;
+  resendFromEmail?: string;
+  hmacKey?: string;
+  appUrl?: string;
   /** Injectable for tests; overrides databaseUrl when present. */
   db?: Database;
 }
@@ -53,6 +83,10 @@ export function createReconcileRoute(envInput?: ReconcilerEnv) {
         reconcileSecret: raw.RECONCILE_SECRET,
         qstashToken: raw.QSTASH_TOKEN,
         workerUrl: raw.AUDIT_WORKER_URL,
+        resendApiKey: raw.RESEND_API_KEY,
+        resendFromEmail: raw.RESEND_FROM_EMAIL,
+        hmacKey: raw.ABUSE_SIGNAL_HMAC_KEY,
+        appUrl: raw.APP_URL ?? raw.NEXT_PUBLIC_APP_URL,
       };
     }
     const env = envInput;
@@ -93,6 +127,7 @@ export function createReconcileRoute(envInput?: ReconcilerEnv) {
 
       let enqueued = 0;
       let skipped = 0;
+      let emailsRetried = 0;
 
       for (const job of recoverable) {
         // Stuck leases are simply re-leased on next delivery; republishing is
@@ -129,10 +164,41 @@ export function createReconcileRoute(envInput?: ReconcilerEnv) {
         }
       }
 
+      // POR-25: retry pending/failed transactional email deliveries. The
+      // EmailSender's ledger dedup makes repeated sweeps safe.
+      if (
+        env.resendApiKey &&
+        env.resendFromEmail &&
+        env.hmacKey &&
+        env.appUrl
+      ) {
+        const sender = new EmailSender(
+          database.db,
+          createResendClient(env.resendApiKey),
+          {
+            fromEmail: env.resendFromEmail,
+            appUrl: env.appUrl,
+            serviceContact: "support@roastmylp.app",
+          },
+        );
+        const pending = await new DrizzleEmailRepository(
+          database.db,
+        ).findPending(EMAIL_SWEEP_BATCH);
+        for (const delivery of pending) {
+          const retried = await retryPendingEmail(
+            sender,
+            delivery,
+            env.hmacKey,
+          );
+          if (retried) emailsRetried += 1;
+        }
+      }
+
       return json(200, {
         scanned: recoverable.length,
         enqueued,
         skipped,
+        emailsRetried,
       });
     } finally {
       await database.close();
