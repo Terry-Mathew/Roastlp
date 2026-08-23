@@ -37,27 +37,40 @@ export interface ReconcilerEnv {
 /**
  * Scheduled recovery sweep. Re-enqueues paid-but-unqueued jobs and re-drives
  * retry-due or stuck-lease jobs by republishing them to the QStash worker.
- * Protected by a shared secret supplied either as the `x-reconcile-secret`
- * header (manual/curl) or a `?secret=` query parameter (Vercel Cron, which
- * cannot send custom headers).
+ * Protected by a shared secret supplied as the `x-reconcile-secret` header
+ * (manual/curl), an `Authorization: Bearer` header (Vercel Cron attaches
+ * `Bearer $CRON_SECRET` automatically), or a `?secret=` query parameter.
  */
-export function createReconcileRoute(
-  env: ReconcilerEnv = process.env as unknown as ReconcilerEnv,
-) {
+export function createReconcileRoute(envInput?: ReconcilerEnv) {
   return async function POST(request: Request): Promise<Response> {
+    // Read process.env lazily at request time: capturing it in a default
+    // parameter snapshots the build-time environment, which lacks Vercel
+    // "sensitive" variables at runtime.
+    if (!envInput) {
+      const raw = process.env as unknown as Record<string, string | undefined>;
+      envInput = {
+        databaseUrl: raw.DATABASE_URL,
+        reconcileSecret: raw.RECONCILE_SECRET,
+        qstashToken: raw.QSTASH_TOKEN,
+        workerUrl: raw.AUDIT_WORKER_URL,
+      };
+    }
+    const env = envInput;
     if ((!env.databaseUrl && !env.db) || !env.reconcileSecret)
-      return json(503, {
-        error: "RECONCILER_UNAVAILABLE",
-        diag: {
-          db: !!env.db,
-          databaseUrl: !!env.databaseUrl,
-          secret: !!env.reconcileSecret,
-        },
-      });
+      return json(503, { error: "RECONCILER_UNAVAILABLE" });
 
     const url = new URL(request.url);
+    // Accept the shared secret via header (manual/curl), Authorization Bearer
+    // (Vercel Cron auto-attaches `Bearer $CRON_SECRET`), or query parameter
+    // (`?secret=`, fallback for schedulers that cannot send headers).
+    const authorization = request.headers.get("authorization");
+    const bearer =
+      authorization && authorization.startsWith("Bearer ")
+        ? authorization.slice("Bearer ".length)
+        : null;
     const presented =
       request.headers.get("x-reconcile-secret") ??
+      bearer ??
       url.searchParams.get("secret") ??
       "";
     const expected = env.reconcileSecret;
