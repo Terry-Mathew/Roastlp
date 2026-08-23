@@ -11,6 +11,7 @@ import { keyedDigest, requestFingerprint } from "./checkout-crypto";
 import { ROAST_AMOUNT_PAISE, ROAST_CURRENCY } from "./checkout-policy";
 import type { CheckoutLimiter } from "./checkout-abuse";
 import type { OrderProvider, RazorpayOrder } from "./razorpay-orders";
+import { deriveReportViewKey } from "./view-key";
 
 export class CheckoutConflictError extends Error {}
 
@@ -25,7 +26,12 @@ export interface CheckoutDependencies {
   now?: () => Date;
 }
 
-function publicResponse(keyId: string, order: RazorpayOrder): CheckoutResponse {
+function publicResponse(
+  keyId: string,
+  order: RazorpayOrder,
+  hmacKey: string,
+  roastId: string,
+): CheckoutResponse {
   return {
     orderId: order.id,
     keyId,
@@ -33,6 +39,8 @@ function publicResponse(keyId: string, order: RazorpayOrder): CheckoutResponse {
     currency: ROAST_CURRENCY,
     name: "RoastMyLP",
     description: "One screenshot-based landing page Roast",
+    roastId,
+    viewKey: deriveReportViewKey(hmacKey, roastId),
   };
 }
 
@@ -82,7 +90,12 @@ export async function createCheckout(raw: unknown, deps: CheckoutDependencies) {
       existing.roastId,
     );
     await deps.repository.completeOrder(existing.id, order.id);
-    return publicResponse(deps.publicKeyId, order);
+    return publicResponse(
+      deps.publicKeyId,
+      order,
+      deps.hmacKey,
+      existing.roastId,
+    );
   }
 
   const attemptId = randomUUID();
@@ -117,5 +130,5 @@ export async function createCheckout(raw: unknown, deps: CheckoutDependencies) {
     attempt.roastId,
   );
   await deps.repository.completeOrder(attempt.id, order.id);
-  return publicResponse(deps.publicKeyId, order);
+  return publicResponse(deps.publicKeyId, order, deps.hmacKey, attempt.roastId);
 }

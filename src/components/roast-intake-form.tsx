@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { ROAST_PRICE_INR } from "@/lib/product";
 import {
@@ -54,6 +55,7 @@ function validateEmail(value: string): string | undefined {
 }
 
 export function RoastIntakeForm() {
+  const router = useRouter();
   const urlRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<Errors>({});
@@ -61,6 +63,7 @@ export function RoastIntakeForm() {
   const [submitting, setSubmitting] = useState(false);
   const [checkoutScriptRequested, setCheckoutScriptRequested] = useState(false);
   const idempotencyKey = useRef<string>("");
+  const roastIdRef = useRef<string>("");
   const checkoutScriptGate = useRef<{
     promise: Promise<void>;
     resolve: () => void;
@@ -136,7 +139,15 @@ export function RoastIntakeForm() {
         currency: string;
         name: string;
         description: string;
+        roastId: string;
+        viewKey: string;
       };
+      try {
+        sessionStorage.setItem(`rm-view:${order.roastId}`, order.viewKey);
+      } catch {
+        // Private storage unavailable; the emailed link still works.
+      }
+      roastIdRef.current = order.roastId;
       if (!(await scriptReady)) {
         setNotice(
           "The payment window could not load. No payment was taken. Please try again.",
@@ -177,8 +188,11 @@ export function RoastIntakeForm() {
             }
             completed = true;
             setNotice(
-              "Payment authorization verified. We are confirming capture before starting your review.",
+              "Payment authorization verified. Taking you to your audit…",
             );
+            const roastId = roastIdRef.current;
+            if (roastId) router.push(`/auditing/${roastId}`);
+            else setSubmitting(false);
           } catch {
             setNotice(
               "We could not securely verify the payment response. Do not pay again; contact support with your Razorpay receipt.",

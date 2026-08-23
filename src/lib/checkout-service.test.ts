@@ -11,6 +11,7 @@ import {
   TERMS_VERSION,
 } from "./checkout-policy";
 import { CheckoutConflictError, createCheckout } from "./checkout-service";
+import { deriveReportViewKey } from "./view-key";
 import type { OrderProvider, RazorpayOrder } from "./razorpay-orders";
 
 const HMAC_KEY = "a-secure-test-key-with-at-least-thirty-two-bytes";
@@ -114,6 +115,11 @@ describe("POR-13 checkout creation", () => {
       currency: "INR",
       name: "RoastMyLP",
       description: "One screenshot-based landing page Roast",
+      roastId: expect.any(String),
+      viewKey: deriveReportViewKey(
+        HMAC_KEY,
+        (result as { roastId: string }).roastId,
+      ),
     });
   });
 

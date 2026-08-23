@@ -14,6 +14,12 @@ export interface AuditPipelineDeps {
   model: string;
   /** Injectable for tests; defaults to the Drizzle-backed store. */
   reports?: Pick<DrizzleReportRepository, "saveReport">;
+  /**
+   * Runs once after the report is first persisted: marks the roast completed
+   * and binds the derived view-key capability grant. Errors here fail the
+   * delivery as retryable so completion is never silently skipped.
+   */
+  onReportPersisted?: (roastId: string) => Promise<void>;
 }
 
 /**
@@ -59,11 +65,21 @@ export function createAuditPipeline(deps: AuditPipelineDeps): AuditPipeline {
         canonicalHost: host,
       });
       const stored = withVerdict(roast);
-      await reports.saveReport(
+      const persisted = await reports.saveReport(
         input.roastId,
         stored as unknown as Record<string, unknown>,
         deps.model,
       );
+      if (persisted && deps.onReportPersisted) {
+        try {
+          await deps.onReportPersisted(input.roastId);
+        } catch {
+          return {
+            classification: "retryable_failure",
+            errorCode: "REPORT_COMPLETION_FAILED",
+          };
+        }
+      }
       return { classification: "succeeded" };
     } catch (error) {
       if (error instanceof VisionAnalysisError) {

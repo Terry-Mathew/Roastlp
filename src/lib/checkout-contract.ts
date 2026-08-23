@@ -29,6 +29,13 @@ export const checkoutResponseSchema = z.object({
   currency: z.literal("INR"),
   name: z.literal("RoastMyLP"),
   description: z.literal("One screenshot-based landing page Roast"),
+  /** Opaque roast reference for progress polling. Not a capability. */
+  roastId: z.uuid(),
+  /**
+   * The private report view key (256-bit capability). Shown once here; the
+   * payer's browser keeps it for the post-payment report redirect.
+   */
+  viewKey: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
 });
 
 export type CheckoutResponse = z.infer<typeof checkoutResponseSchema>;

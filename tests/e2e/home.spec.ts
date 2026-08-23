@@ -125,9 +125,7 @@ test("opens Razorpay and reports only server-verified authorization", async ({
     .click();
 
   await expect(
-    page.getByText(
-      "Payment authorization verified. We are confirming capture before starting your review.",
-    ),
+    page.getByText("Payment authorization verified. Taking you to your audit…"),
   ).toBeVisible();
   expect(checkoutScriptRequests).toBe(1);
   expect(verificationBody).toEqual(providerResponse);
