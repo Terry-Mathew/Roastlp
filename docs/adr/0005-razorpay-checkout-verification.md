@@ -56,6 +56,9 @@ charge.
   https://razorpay.com/docs/developer-tools/integrations/standard-checkout/
 - Razorpay Standard Checkout best practices:
   https://razorpay.com/docs/payments/payment-gateway/web-integration/standard/best-practices/
+- Razorpay Test UPI details, including the documented Test Mode cancellation
+  limitation:
+  https://razorpay.com/docs/payments/payments/test-upi-details/?preferred-country=IN
 - Next.js 16.3.2 bundled Route Handler, Script and CSP guides under
   `node_modules/next/dist/docs/01-app/`.
 
@@ -66,3 +69,16 @@ staging Preview and preserve redacted evidence for Checkout load, dismiss,
 failure, successful authorization, automatic-capture configuration, webhook
 capture, browser CSP/network behavior and duplicate callback handling. Do not
 enable live credentials until POR-15 and all launch blockers are complete.
+
+The protected POR-14 Preview was exercised on 2026-08-23 with reserved
+synthetic input. It failed closed with `Secure checkout is temporarily
+unavailable. No payment was taken.` because Test Mode checkout was not enabled
+and configured in that Preview. This is expected safe behavior, but it does not
+satisfy the real provider-flow evidence gate.
+
+Razorpay documents that Test Mode UPI cancellation results in a successful
+payment. Therefore the acceptance criterion must not claim a simulated UPI
+cancellation as evidence. Test Mode can cover UPI success and failure; modal
+dismissal can cover customer cancellation without payment; a genuine UPI
+cancellation would require a separately approved controlled Live Mode drill.
+See `docs/operations/razorpay-checkout-test-matrix.md`.
