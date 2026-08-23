@@ -5,6 +5,11 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { normalizeCustomerEmail } from "./customer-data";
+import { DrizzleCheckoutRepository } from "./checkout-repository";
+import {
+  DrizzleWebhookRepository,
+  WebhookCollisionError,
+} from "./webhook-repository";
 import { findActiveReportAccess } from "./report-access-query";
 import {
   createReportAccessToken,
@@ -204,6 +209,110 @@ describe("POR-6 durable data model", () => {
       }),
     );
     expect(wrongAmount).toMatch(/payments_phase_1_amount_check/);
+  });
+
+  it("records POR-14 authorization once and rejects a different payment id", async () => {
+    const roast = await insertRoast();
+    await db.insert(payments).values({
+      roastId: roast.id,
+      razorpayOrderId: "order_por14Database1",
+      receipt: "receipt_por14_database_1",
+      amountPaise: 19_900,
+    });
+    const repository = new DrizzleCheckoutRepository(
+      db as unknown as ConstructorParameters<
+        typeof DrizzleCheckoutRepository
+      >[0],
+    );
+
+    await repository.recordAuthorizedPayment(
+      "order_por14Database1",
+      "pay_por14Database1",
+    );
+    await repository.recordAuthorizedPayment(
+      "order_por14Database1",
+      "pay_por14Database1",
+    );
+    await expect(
+      repository.recordAuthorizedPayment(
+        "order_por14Database1",
+        "pay_differentPayment1",
+      ),
+    ).rejects.toThrow(/conflicts with stored payment/);
+
+    await expect(
+      repository.findPaymentByOrder("order_por14Database1"),
+    ).resolves.toMatchObject({
+      state: "authorized",
+      razorpayPaymentId: "pay_por14Database1",
+    });
+  });
+
+  it("atomically reconciles POR-15 capture, Roast release, job creation, and webhook completion", async () => {
+    const roast = await insertRoast();
+    await db.insert(payments).values({
+      roastId: roast.id,
+      state: "authorized",
+      razorpayOrderId: "order_por15Database1",
+      razorpayPaymentId: "pay_por15Database1",
+      receipt: "r_por15_database_1",
+      amountPaise: 19_900,
+    });
+    const repository = new DrizzleWebhookRepository(
+      db as unknown as ConstructorParameters<
+        typeof DrizzleWebhookRepository
+      >[0],
+    );
+    const verifiedInput = {
+      providerEventId: "evt_por15_database_1",
+      eventType: "payment.captured",
+      payloadDigest: "c".repeat(64),
+      verifiedPayload: {
+        paymentId: "pay_por15Database1",
+        orderId: "order_por15Database1",
+      },
+    };
+    const webhook = await repository.recordVerified(verifiedInput);
+    expect(await repository.recordVerified(verifiedInput)).toEqual(webhook);
+    await expect(
+      repository.recordVerified({
+        ...verifiedInput,
+        payloadDigest: "d".repeat(64),
+      }),
+    ).rejects.toBeInstanceOf(WebhookCollisionError);
+    expect(await repository.claim(webhook.id)).toBe(true);
+
+    await repository.completeCaptured(
+      webhook.id,
+      "order_por15Database1",
+      "pay_por15Database1",
+      new Date("2026-08-23T00:00:00Z"),
+    );
+
+    const [storedPayment] = await db
+      .select({ state: payments.state, capturedAt: payments.capturedAt })
+      .from(payments)
+      .where(eq(payments.razorpayOrderId, "order_por15Database1"));
+    const [storedRoast] = await db
+      .select({ state: roasts.state })
+      .from(roasts)
+      .where(eq(roasts.id, roast.id));
+    const jobs = await db
+      .select({ roastId: auditJobs.roastId })
+      .from(auditJobs)
+      .where(eq(auditJobs.roastId, roast.id));
+    const [storedWebhook] = await db
+      .select({ state: webhookEvents.state })
+      .from(webhookEvents)
+      .where(eq(webhookEvents.id, webhook.id));
+
+    expect(storedPayment).toEqual({
+      state: "captured",
+      capturedAt: new Date("2026-08-23T00:00:00Z"),
+    });
+    expect(storedRoast?.state).toBe("ready_for_fulfillment");
+    expect(jobs).toEqual([{ roastId: roast.id }]);
+    expect(storedWebhook?.state).toBe("processed");
   });
 
   it("enforces one privacy-safe checkout attempt per request key, receipt, roast, and provider order", async () => {

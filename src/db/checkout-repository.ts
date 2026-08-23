@@ -34,7 +34,28 @@ export interface CheckoutRepository {
   completeOrder(attemptId: string, orderId: string): Promise<void>;
 }
 
-export class DrizzleCheckoutRepository implements CheckoutRepository {
+export interface PaymentVerificationView {
+  state:
+    | "created"
+    | "authorized"
+    | "captured"
+    | "failed"
+    | "partially_refunded"
+    | "refunded";
+  razorpayOrderId: string;
+  razorpayPaymentId: string | null;
+}
+
+export interface PaymentVerificationRepository {
+  findPaymentByOrder(
+    orderId: string,
+  ): Promise<PaymentVerificationView | undefined>;
+  recordAuthorizedPayment(orderId: string, paymentId: string): Promise<void>;
+}
+
+export class DrizzleCheckoutRepository
+  implements CheckoutRepository, PaymentVerificationRepository
+{
   constructor(private db: Database) {}
 
   async findByRequestKey(hash: string) {
@@ -124,6 +145,50 @@ export class DrizzleCheckoutRepository implements CheckoutRepository {
         amountPaise: 19_900,
         currency: "INR",
       });
+    });
+  }
+
+  async findPaymentByOrder(orderId: string) {
+    return this.db.query.payments.findFirst({
+      where: eq(payments.razorpayOrderId, orderId),
+      columns: {
+        state: true,
+        razorpayOrderId: true,
+        razorpayPaymentId: true,
+      },
+    });
+  }
+
+  async recordAuthorizedPayment(orderId: string, paymentId: string) {
+    await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(payments)
+        .set({
+          state: "authorized",
+          razorpayPaymentId: paymentId,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(payments.razorpayOrderId, orderId),
+            eq(payments.state, "created"),
+          ),
+        )
+        .returning({ id: payments.id });
+      if (updated) return;
+
+      const current = await tx.query.payments.findFirst({
+        where: eq(payments.razorpayOrderId, orderId),
+        columns: { state: true, razorpayPaymentId: true },
+      });
+      if (
+        current?.razorpayPaymentId === paymentId &&
+        ["authorized", "captured", "partially_refunded", "refunded"].includes(
+          current.state,
+        )
+      )
+        return;
+      throw new Error("Payment authorization conflicts with stored payment");
     });
   }
 }
